@@ -1,8 +1,5 @@
 #!/bin/bash
 
-# Start timer
-start_time=$(date +%s)
-
 # Function to extract code from Chrome Remote Desktop command
 extract_chrome_code() {
     local full_command="$1"
@@ -44,6 +41,10 @@ else
         CHROME_REMOTE_DESKTOP_CODE=""
     fi
 fi
+
+# Start timer after Chrome Remote Desktop command input
+start_time=$(date +%s)
+echo "Starting installation process..."
 
 # Get the user name and remote desktop default pin
 CHROME_REMOTE_USER_NAME="${SUDO_USER}"
@@ -142,12 +143,39 @@ if [ $DISPLAY_INSTALL_STATUS -eq 0 ]; then
   sudo systemctl restart chrome-remote-desktop@${CHROME_REMOTE_USER_NAME}.service
 
   echo "Setting manual proxy settings (${IP_ADDRESS}:${PORT}) for Chrome Remote Desktop session..."
-  sudo -u ${CHROME_REMOTE_USER_NAME} dbus-launch gsettings set org.gnome.system.proxy mode 'manual'
-  sudo -u ${CHROME_REMOTE_USER_NAME} dbus-launch gsettings set org.gnome.system.proxy.http host ${IP_ADDRESS}
-  sudo -u ${CHROME_REMOTE_USER_NAME} dbus-launch gsettings set org.gnome.system.proxy.http port ${PORT}
-  sudo -u ${CHROME_REMOTE_USER_NAME} dbus-launch gsettings set org.gnome.system.proxy.https host ${IP_ADDRESS}
-  sudo -u ${CHROME_REMOTE_USER_NAME} dbus-launch gsettings set org.gnome.system.proxy.https port ${PORT}
-  echo "Manual proxy settings applied."
+  
+  # Create proxy configuration for XFCE4
+  USER_HOME="/home/${CHROME_REMOTE_USER_NAME}"
+  
+  # Set environment variables for proxy (system-wide)
+  echo "export http_proxy=http://${IP_ADDRESS}:${PORT}" | sudo tee -a ${USER_HOME}/.bashrc
+  echo "export https_proxy=http://${IP_ADDRESS}:${PORT}" | sudo tee -a ${USER_HOME}/.bashrc
+  echo "export HTTP_PROXY=http://${IP_ADDRESS}:${PORT}" | sudo tee -a ${USER_HOME}/.bashrc
+  echo "export HTTPS_PROXY=http://${IP_ADDRESS}:${PORT}" | sudo tee -a ${USER_HOME}/.bashrc
+  
+  # Create proxy configuration for applications
+  sudo -u ${CHROME_REMOTE_USER_NAME} mkdir -p ${USER_HOME}/.config/environment.d
+  echo "http_proxy=http://${IP_ADDRESS}:${PORT}" | sudo -u ${CHROME_REMOTE_USER_NAME} tee ${USER_HOME}/.config/environment.d/proxy.conf
+  echo "https_proxy=http://${IP_ADDRESS}:${PORT}" | sudo -u ${CHROME_REMOTE_USER_NAME} tee -a ${USER_HOME}/.config/environment.d/proxy.conf
+  echo "HTTP_PROXY=http://${IP_ADDRESS}:${PORT}" | sudo -u ${CHROME_REMOTE_USER_NAME} tee -a ${USER_HOME}/.config/environment.d/proxy.conf
+  echo "HTTPS_PROXY=http://${IP_ADDRESS}:${PORT}" | sudo -u ${CHROME_REMOTE_USER_NAME} tee -a ${USER_HOME}/.config/environment.d/proxy.conf
+  
+  # Configure Chrome browser proxy settings
+  CHROME_POLICY_DIR="/etc/opt/chrome/policies/managed"
+  sudo mkdir -p ${CHROME_POLICY_DIR}
+  sudo tee ${CHROME_POLICY_DIR}/proxy.json > /dev/null <<EOF
+{
+  "ProxyMode": "fixed_servers",
+  "ProxyServer": "${IP_ADDRESS}:${PORT}",
+  "ProxyBypassList": "localhost,127.0.0.1"
+}
+EOF
+  
+  # Set proper ownership
+  sudo chown -R ${CHROME_REMOTE_USER_NAME}:${CHROME_REMOTE_USER_NAME} ${USER_HOME}/.config
+  sudo chown ${CHROME_REMOTE_USER_NAME}:${CHROME_REMOTE_USER_NAME} ${USER_HOME}/.bashrc
+  
+  echo "Manual proxy settings applied for XFCE4 environment."
  else
   echo "GUI installation failed. Skipping desktop environment reload."
 fi
