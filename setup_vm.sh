@@ -169,13 +169,81 @@ if [ $DISPLAY_INSTALL_STATUS -eq 0 ]; then
   "ProxyServer": "${IP_ADDRESS}:${PORT}",
   "ProxyBypassList": "localhost,127.0.0.1"
 }
-EOF
-  
+
+EOF  
   # Set proper ownership
   sudo chown -R ${CHROME_REMOTE_USER_NAME}:${CHROME_REMOTE_USER_NAME} ${USER_HOME}/.config
   sudo chown ${CHROME_REMOTE_USER_NAME}:${CHROME_REMOTE_USER_NAME} ${USER_HOME}/.bashrc
   
   echo "Manual proxy settings applied for XFCE4 environment."
+  
+  # Configure autostart applications
+  echo "Configuring autostart applications..."
+  AUTOSTART_DIR="${USER_HOME}/.config/autostart"
+  sudo -u ${CHROME_REMOTE_USER_NAME} mkdir -p ${AUTOSTART_DIR}
+
+  # Create Chrome autostart entry
+  sudo -u ${CHROME_REMOTE_USER_NAME} tee ${AUTOSTART_DIR}/chrome.desktop > /dev/null <<EOF
+[Desktop Entry]
+Type=Application
+Exec=google-chrome --proxy-server=${IP_ADDRESS}:${PORT} --proxy-bypass-list=localhost,127.0.0.1
+Hidden=false
+NoDisplay=false
+X-GNOME-Autostart-enabled=true
+Name=Google Chrome
+Comment=Start Google Chrome with proxy settings
+EOF
+
+  # Create Burp Suite autostart entry
+  sudo -u ${CHROME_REMOTE_USER_NAME} tee ${AUTOSTART_DIR}/burpsuite.desktop > /dev/null <<EOF
+[Desktop Entry]
+Type=Application
+Exec=sh -c 'sleep 5 && /opt/BurpSuiteCommunity/BurpSuiteCommunity'
+Hidden=false
+NoDisplay=false
+X-GNOME-Autostart-enabled=true
+Name=Burp Suite Community
+Comment=Start Burp Suite Community Edition
+EOF
+
+  # Create a startup script for better control
+  STARTUP_SCRIPT="${USER_HOME}/.config/startup-apps.sh"
+  sudo -u ${CHROME_REMOTE_USER_NAME} tee ${STARTUP_SCRIPT} > /dev/null <<EOF
+#!/bin/bash
+# Wait for desktop environment to fully load
+sleep 10
+
+# Start Google Chrome with proxy settings
+google-chrome --proxy-server=${IP_ADDRESS}:${PORT} --proxy-bypass-list=localhost,127.0.0.1 &
+
+# Wait a few seconds before starting Burp Suite
+sleep 5
+
+# Start Burp Suite Community Edition
+/opt/BurpSuiteCommunity/BurpSuiteCommunity &
+EOF
+
+  # Make the startup script executable
+  sudo chmod +x ${STARTUP_SCRIPT}
+  sudo chown ${CHROME_REMOTE_USER_NAME}:${CHROME_REMOTE_USER_NAME} ${STARTUP_SCRIPT}
+
+  # Create autostart entry for the startup script (alternative method)
+  sudo -u ${CHROME_REMOTE_USER_NAME} tee ${AUTOSTART_DIR}/startup-apps.desktop > /dev/null <<EOF
+[Desktop Entry]
+Type=Application
+Exec=${STARTUP_SCRIPT}
+Hidden=false
+NoDisplay=false
+X-GNOME-Autostart-enabled=true
+Name=Startup Applications
+Comment=Launch Chrome and Burp Suite automatically
+EOF
+
+  # Set proper ownership for autostart directory
+  sudo chown -R ${CHROME_REMOTE_USER_NAME}:${CHROME_REMOTE_USER_NAME} ${AUTOSTART_DIR}
+
+  echo "Autostart applications configured successfully."
+  echo "Chrome and Burp Suite will launch automatically on login."
  else
   echo "GUI installation failed. Skipping desktop environment reload."
 fi
